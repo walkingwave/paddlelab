@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { BALL } from './constants.js';
 import { ballTexture } from './textures.js';
+import { HELD_SERVE_BOB, HELD_SERVE_BOB_SPEED } from './serve.js';
 
 // Geometry and material are built once and shared across the whole pool.
 let sharedGeometry = null;
@@ -90,9 +91,10 @@ export class Ball {
   // A serve waits for a real stroke rather than falling away under gravity.
   // It bobs vertically at a fixed x/z point, giving every input method the
   // same clear, repeatable ball to hit.
-  holdForServe(position, { amplitude = 0.12, angularSpeed = 4.2 } = {}) {
+  holdForServe(position, { amplitude = HELD_SERVE_BOB, angularSpeed = HELD_SERVE_BOB_SPEED } = {}) {
     this.serve(position, _axis.set(0, 0, 0));
     this.frozen = true;
+    this.mesh.position.y = position.y + amplitude;
     this.serveToss = {
       centerY: position.y,
       amplitude,

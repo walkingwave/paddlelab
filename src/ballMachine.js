@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { TABLE, NET, BALL, COLORS, PHYSICS, PLAY_AREA } from './constants.js';
+import { createHeldServePosition } from './serve.js';
 
 // Robot ball machine at the far end of the table. This is the "trainer" part
 // of the app: it aims at a chosen spot on the player's half and launches with
@@ -287,11 +288,7 @@ export class BallMachine {
   }
 
   _holdServeForPlayer(ball) {
-    const origin = new THREE.Vector3(
-      0,
-      TABLE.HEIGHT + 0.42,
-      PLAY_AREA.PLAYER_Z - 0.62
-    );
+    const origin = createHeldServePosition();
     this.aim.copy(origin);
     ball.holdForServe(origin);
   }

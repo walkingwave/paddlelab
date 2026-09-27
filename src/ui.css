@@ -695,6 +695,13 @@ canvas {
 #coach-panel[hidden] {
   display: none;
 }
+/* Keep the visualization below fixed coaching panels and clear of the bottom
+   controls instead of letting its high inline z-index cover both. */
+#flybrain-viz {
+  top: auto !important;
+  bottom: 60px !important;
+  z-index: 9 !important;
+}
 .coach-panel__head,
 .coach-panel__metrics {
   display: flex;
@@ -825,6 +832,14 @@ canvas {
   font-size: 11px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
+}
+.settings__close {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right));
+  min-width: 44px;
+  min-height: 44px;
+  font-size: 12px;
 }
 #bar[hidden] {
   display: none;
@@ -988,6 +1003,29 @@ a:focus-visible,
 }
 
 @media (max-width: 640px) {
+  #bar {
+    gap: clamp(8px, 2.5vw, 14px);
+    padding: 8px max(10px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+    font-size: clamp(9px, 2.7vw, 11px);
+    letter-spacing: 0.08em;
+  }
+  #bar .bar__mode {
+    max-width: 19vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #bar .bar__spacer {
+    min-width: 0;
+  }
+  #bar .key {
+    flex: 0 0 auto;
+    font-size: inherit;
+    letter-spacing: 0.04em;
+    touch-action: manipulation;
+  }
+  #bar .key b {
+    display: none;
+  }
   .bar__stats {
     display: none;
   }
@@ -995,8 +1033,21 @@ a:focus-visible,
     top: 10px;
     right: 10px;
     width: min(280px, calc(100vw - 20px));
-    max-height: calc(100vh - 104px);
+    max-height: calc(100dvh - 104px);
     overflow-y: auto;
+  }
+  #flybrain-viz {
+    right: 10px !important;
+    bottom: 58px !important;
+    width: min(180px, 42vw) !important;
+    height: auto !important;
+    aspect-ratio: 1;
+  }
+  #settings .settings__title {
+    align-self: center;
+  }
+  #bar .key[data-act="exit"] {
+    color: var(--paper);
   }
   /* A four-line bracket on a phone-sized viewport is taller than the window,
      so it scrolls within a panel instead of drawing over the coach. */

@@ -45,7 +45,7 @@ import { createTuningPanel } from './webcamTuningPanel.js';
 import { createPhonePair } from './net/phonePair.js';
 import { VersusMatch } from './versus.js';
 import { Tournament, RESULT_STATUS, TOURNAMENT_SIZE } from './tournament.js';
-import { createServeToss } from './serve.js';
+import { createHeldServePosition, createServeToss } from './serve.js';
 import { summarizeMatch, analyzeShot, narrate, recordProfileEvent, recordTelemetry, getProfileSummary } from './backendApi.js';
 import { PLAY_AREA, TABLE, COLORS, BALL } from './constants.js';
 
@@ -207,6 +207,7 @@ scene.add(targetZone.mesh);
 // real spin, real restitution, and a net cord behaves like a net cord.
 const opponent = new Opponent();
 scene.add(opponent.mesh);
+scene.add(opponent.paddle.boundsHelper);
 machine.server = opponent; // in rally mode the opponent puts the ball in play
 
 // The "Fly brain" difficulty: paddle placement read out of a fruit fly's
@@ -673,6 +674,7 @@ for (const i of [0, 1]) {
 
   const paddle = new Paddle();
   paddle.attachTo(grip);
+  scene.add(paddle.boundsHelper);
   paddles.push(paddle);
 
   // Hand tracking, so the bat can follow your actual hand holding a real
@@ -759,6 +761,7 @@ const desktopPaddle = new Paddle();
 // life-size for the headset.
 desktopPaddle.setScale(DESKTOP_PADDLE_SCALE);
 desktopPaddle.attachTo(desktopRig);
+scene.add(desktopPaddle.boundsHelper);
 desktopPaddle.enabled = false; // switched on below whenever we're not in XR
 desktopPaddle.mesh.visible = false;
 paddles.push(desktopPaddle);
@@ -1629,6 +1632,7 @@ const guestBallTarget = new THREE.Vector3();
 // model as yours — real spin, real restitution.
 const remotePaddle = new Paddle();
 scene.add(remotePaddle.mesh);
+scene.add(remotePaddle.boundsHelper);
 remotePaddle.enabled = false;
 remotePaddle.networked = true;
 remotePaddle.mesh.visible = false; // nothing to show until a packet arrives
@@ -1669,15 +1673,16 @@ function serveVersusBall() {
   const serverIsLocal = match.server === netMode;
   const bat = serverIsLocal ? getLocalVersusPaddle() : remotePaddle;
   const side = match.server === 'host' ? 1 : -1;
-  const center = new THREE.Vector3(
-    0,
-    TABLE.HEIGHT + 0.19,
-    side * (PLAY_AREA.PLAYER_Z - 0.72)
-  );
-  if (bat?.tracking && bat.bladeCenter.lengthSq() > 0.01) center.copy(bat.bladeCenter);
+  const center = createHeldServePosition({ side });
+  const useTrackedPose = serverIsLocal && bat?.tracking && bat.bladeCenter.lengthSq() > 0.01;
+  if (useTrackedPose) center.copy(bat.bladeCenter);
   center.y = THREE.MathUtils.clamp(center.y, TABLE.HEIGHT + 0.08, TABLE.HEIGHT + 0.62);
 
-  const toss = createServeToss({ center, toNet });
+  const toss = createServeToss({
+    center,
+    toNet,
+    normal: useTrackedPose ? bat.bladeNormal : null,
+  });
   ball.serve(toss.position, toss.velocity);
   ball.floorCounted = false;
   ball.awaitingServeStrike = true; // a toss nobody hits is a re-serve, not a point
@@ -2641,6 +2646,10 @@ function applyScenario() {
   // over the table while a second one appeared at the new spot.
   clearBalls();
   coach.setScenario(index < 0 ? 0 : index);
+  game.revision++;
+  if (ui.menu.hidden && settings.get('game') === 'coach') {
+    ui.showCoachReady(`Coach · ${coach.scenario.name}`);
+  }
 }
 
 // Coach is a separate game, so the machine and the rally opponent stand

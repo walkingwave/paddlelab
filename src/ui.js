@@ -1149,6 +1149,9 @@ export class UI {
     el.setAttribute('aria-modal', 'true');
     el.setAttribute('aria-label', 'Settings');
     el.innerHTML = `
+      <button class="key settings__close" data-settings-close aria-label="Close settings">
+        <b>×</b><span>Close</span>
+      </button>
       <div class="settings__title">Settings</div>
       <div class="settings__list" data-rows></div>
       <div class="hint">Tab / Esc to close</div>
@@ -1156,6 +1159,7 @@ export class UI {
     document.body.appendChild(el);
     this.settingsEl = el;
     this.rows = el.querySelector('[data-rows]');
+    el.querySelector('[data-settings-close]').onclick = () => this.toggleSettings(false);
   }
 
   _renderSettings() {

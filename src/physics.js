@@ -29,7 +29,13 @@ const _prev = new THREE.Vector3();
 const _hit = new THREE.Vector3();
 const _surfaceVel = new THREE.Vector3();
 const _accel = new THREE.Vector3();
+const _paddlePreviousCenter = new THREE.Vector3();
+const _paddleContactCenter = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
+const _ballBounds = new THREE.Box3();
+const _previousBallBounds = new THREE.Box3();
+const _sweptBounds = new THREE.Box3();
+const _sweptPaddleBounds = new THREE.Box3();
 
 // Restitution curves per surface. See BALL in constants.js for why COR has to
 // vary with impact speed rather than being a single number.
@@ -59,6 +65,12 @@ export class PhysicsWorld {
 
   // dt = real frame time; steps physics at FIXED_DT.
   step(dt, balls, paddles) {
+    // Paddle.update() samples each input pose before physics. Preserve its last
+    // sampled bounds here; refreshing every paddle again would overwrite the
+    // previous box and defeat the swept paddle broad phase below.
+    for (const paddle of paddles) {
+      if (!paddle.boundsValid) paddle.updateBounds?.();
+    }
     this._accumulator += Math.min(dt, 0.1); // clamp to avoid spiral after a pause
     while (this._accumulator >= PHYSICS.FIXED_DT) {
       for (const ball of balls) {
@@ -265,11 +277,29 @@ export class PhysicsWorld {
     if ((!paddle.tracking && !paddle.isOpponent) || !paddle.enabled) return;
 
     const p = ball.mesh.position;
+    if (paddle.boundsValid) {
+      _ballBounds.setFromCenterAndSize(p, _tmp.setScalar(BALL.RADIUS * 2));
+      _previousBallBounds.setFromCenterAndSize(prev, _tmp.setScalar(BALL.RADIUS * 2));
+      const currentBounds = paddle.bounds;
+      const previousBounds = paddle.previousBoundsValid
+        ? paddle.previousBounds
+        : currentBounds;
+      _sweptBounds.copy(_ballBounds).union(_previousBallBounds);
+      _sweptPaddleBounds.copy(currentBounds).union(previousBounds);
+      if (!_sweptPaddleBounds.intersectsBox(_sweptBounds)) return;
+    }
     _n.copy(paddle.bladeNormal);
+    _paddlePreviousCenter.copy(paddle.previousBoundsValid
+      ? paddle.previousBladeCenter ?? paddle.bladeCenter
+      : paddle.bladeCenter);
 
     const halfThick = (paddle.headThickness ?? PADDLE.HEAD_THICKNESS) / 2 + BALL.RADIUS;
 
-    _rel.copy(prev).sub(paddle.bladeCenter);
+    // Test the ball path relative to the paddle's previous and current face
+    // centres. The paddle can move substantially between render samples; a
+    // stationary final-plane test would lose contact even when its live box
+    // swept directly through the ball.
+    _rel.copy(prev).sub(_paddlePreviousCenter);
     const d0 = _rel.dot(_n);
     _rel.copy(p).sub(paddle.bladeCenter);
     const d1 = _rel.dot(_n);
@@ -283,12 +313,15 @@ export class PhysicsWorld {
     // Contact point: where the path met the blade plane
     const denom = d0 - d1;
     const t = Math.abs(denom) < 1e-9 ? 0 : d0 / denom;
-    _hit.copy(prev).lerp(p, THREE.MathUtils.clamp(t, 0, 1));
+    const contactTime = THREE.MathUtils.clamp(t, 0, 1);
+    _hit.copy(prev).lerp(p, contactTime);
+    _paddleContactCenter.copy(_paddlePreviousCenter).lerp(paddle.bladeCenter, contactTime);
 
     // Radial distance from the blade axis at that point
-    _rel.copy(_hit).sub(paddle.bladeCenter);
+    _rel.copy(_hit).sub(_paddleContactCenter);
     _tmp.copy(_rel).addScaledVector(_n, -_rel.dot(_n));
-    if (_tmp.length() > (paddle.headRadius ?? PADDLE.HEAD_RADIUS)) return;
+    const radius = paddle.headRadius ?? PADDLE.HEAD_RADIUS;
+    if (_tmp.length() > radius) return;
 
     // Face the normal toward the side the ball came from
     if (d0 < 0) _n.negate();
@@ -296,12 +329,12 @@ export class PhysicsWorld {
     // Surface velocity at the contact point, including the swing's rotation —
     // brushing across the ball is what actually generates spin.
     paddle.velocityAt(_hit, _surfaceVel);
-
     _tmp.copy(ball.velocity).sub(_surfaceVel);
     if (_tmp.dot(_n) >= 0) return; // moving away; already handled
 
     // Place the ball on the struck face before resolving
     p.copy(_hit).addScaledVector(_n, halfThick * 1.02);
+    paddle.velocityAt(_hit, _surfaceVel);
 
     this._resolveContact(
       ball,

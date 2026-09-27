@@ -36,6 +36,11 @@ frame.addEventListener('load', async () => {
     result.checks.sceneChildren = probe.scene.children.length;
     result.checks.ballPool = probe.balls.length;
     result.checks.machineMode = probe.machine.mode?.name ?? null;
+    result.checks.paddleBoundsValid = probe.desktopPaddle.boundsValid;
+    result.checks.paddleBoundsVisible = probe.desktopPaddle.boundsHelper.visible;
+    result.checks.paddleBoundsContainBlade = probe.desktopPaddle.bounds.containsPoint(
+      probe.desktopPaddle.bladeCenter
+    );
 
     // requestAnimationFrame is unreliable in a headless tab, so step the
     // simulation by hand — this is exactly what the dev console does.
@@ -45,6 +50,14 @@ frame.addEventListener('load', async () => {
     result.checks.simMs = Math.round(performance.now() - t0);
     result.checks.servedAfterTicks = probe.machine.servedCount;
     result.checks.gameRevision = probe.game.revision;
+    result.checks.paddleBoundsValid = probe.desktopPaddle.boundsValid;
+    result.checks.paddleBoundsVisible = probe.desktopPaddle.boundsHelper.visible;
+    result.checks.paddleBoundsContainBlade = probe.desktopPaddle.bounds.containsPoint(
+      probe.desktopPaddle.bladeCenter
+    );
+    if (!result.checks.paddleBoundsValid || !result.checks.paddleBoundsVisible || !result.checks.paddleBoundsContainBlade) {
+      throw new Error('desktop paddle bounds were not live and visible');
+    }
 
     // The machine sits disabled behind the start menu (main.js sets that on
     // purpose), so switch it on and let it actually play. This is the path the

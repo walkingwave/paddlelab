@@ -13,6 +13,7 @@ const _prevQuatInv = new THREE.Quaternion();
 const _deltaQuat = new THREE.Quaternion();
 const _axis = new THREE.Vector3();
 const _arm = new THREE.Vector3();
+const PADDLE_BOUNDS_COLOR = 0x35f2c1;
 
 // A paddle attached to a WebXR controller grip. It tracks its own linear and
 // angular velocity, which the physics step needs: the blade's speed sets how
@@ -28,6 +29,21 @@ export class Paddle {
     this.bladeNormal = new THREE.Vector3();
     this.headRadius = PADDLE.HEAD_RADIUS;
     this.headThickness = PADDLE.HEAD_THICKNESS;
+    this.bounds = new THREE.Box3();
+    this.previousBounds = new THREE.Box3();
+    this.boundsValid = false;
+    this.previousBoundsValid = false;
+    this.previousBladeCenter = new THREE.Vector3();
+    this.sampledBladeCenter = new THREE.Vector3();
+    this.sampledBladeCenterValid = false;
+    this.boundsHelper = new THREE.Box3Helper(this.bounds, PADDLE_BOUNDS_COLOR);
+    this.boundsHelper.visible = false;
+    this.boundsHelper.renderOrder = 20;
+    this.boundsHelper.material.depthTest = false;
+    this.boundsHelper.material.transparent = true;
+    this.boundsHelper.material.opacity = 0.85;
+    this.boundsHelper.material.depthWrite = false;
+    this.boundsHelper.frustumCulled = false;
 
     // False until two frames have been sampled — velocity is meaningless
     // before that, and a bogus first value can launch a ball across the room.
@@ -90,6 +106,13 @@ export class Paddle {
     this.tracking = false;
     this.velocity.set(0, 0, 0);
     this.angularVelocity.set(0, 0, 0);
+    this.boundsValid = false;
+    this.previousBoundsValid = false;
+    this.sampledBladeCenterValid = false;
+    if (this.boundsHelper) {
+      this.boundsHelper.visible = this.mesh.visible &&
+        ((this.isOpponent && this.enabled) || this.networked);
+    }
   }
 
   updateFromCamera(timestamp) {
@@ -102,6 +125,7 @@ export class Paddle {
 
   // Call once per render frame with real elapsed time.
   update(dt) {
+    this.mesh.updateWorldMatrix(true, true);
     this._blade.getWorldPosition(_worldPos);
     this._blade.getWorldQuaternion(_worldQuat);
 
@@ -141,9 +165,39 @@ export class Paddle {
       this.tracking = true;
     }
 
+    this.updateBounds();
     this._prevPos.copy(_worldPos);
     this._prevQuat.copy(_worldQuat);
     this._samples++;
+  }
+
+  // Live world-space AABB of the complete paddle, including the handle. The
+  // helper is added to the scene by main.js because bounds are world-space.
+  // This broad phase may admit extra candidates, but the swept face/radius
+  // test in physics remains the actual contact rule. Every input source uses
+  // this same transform-derived update path.
+  updateBounds() {
+    this.mesh.updateWorldMatrix(true, true);
+    if (this.boundsValid) {
+      this.previousBounds.copy(this.bounds);
+      this.previousBoundsValid = true;
+    }
+    const hadPreviousSample = this.sampledBladeCenterValid;
+    this.bounds.setFromObject(this.mesh);
+    this._blade.getWorldPosition(_worldPos);
+    this._blade.getWorldQuaternion(_worldQuat);
+    this.previousBladeCenter.copy(hadPreviousSample ? this.sampledBladeCenter : _worldPos);
+    this.bladeCenter.copy(_worldPos);
+    this.sampledBladeCenter.copy(_worldPos);
+    this.sampledBladeCenterValid = true;
+    this.bladeNormal.set(0, 0, 1).applyQuaternion(_worldQuat).normalize();
+    this.boundsValid = !this.bounds.isEmpty();
+    this.boundsHelper.visible = this.mesh.visible &&
+      (this.tracking || (this.isOpponent && this.enabled) || this.networked);
+    if (this.boundsHelper.parent) {
+      this.boundsHelper.updateWorldMatrix(true, true);
+    }
+    return this.bounds;
   }
 
   // Velocity of the blade surface at a world-space point.
